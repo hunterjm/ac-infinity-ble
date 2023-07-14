@@ -21,7 +21,7 @@ repos:
       - id: check-case-conflict
       - id: check-docstring-first
       - id: check-json
-        exclude: ^.devcontainer/
+        exclude: ^.devcontainer/|^.github/|^.vscode/
       - id: check-toml
       - id: check-xml
       - id: check-yaml

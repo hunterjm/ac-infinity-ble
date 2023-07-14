@@ -23,8 +23,9 @@ packages = [
 "Changelog" = "https://github.com/hunterjm/ac-infinity-ble/blob/main/CHANGELOG.md"
 
 [tool.poetry.dependencies]
-python = "^3.7"
+python = "^3.10"
 bleak = "^0.20.2"
+bleak-retry-connector = "^3.0.2"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.0"
@@ -45,7 +46,7 @@ version_variable = "src/ac_infinity_ble/__init__.py:__version__"
 build_command = "pip install poetry && poetry build"
 
 [tool.pytest.ini_options]
-addopts = "-v -Wdefault --cov=ac_infinity_ble --cov-report=term-missing:skip-covered"
+addopts = "-v -Wdefault"
 pythonpath = ["src"]
 
 [tool.coverage.run]
