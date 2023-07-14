@@ -2,6 +2,12 @@
 
 <!--next-version-placeholder-->
 
+## v0.4.0 (2023-07-14)
+
+### Feature
+
+* Fix set level for non 69 pro fans ([#4](https://github.com/hunterjm/ac-infinity-ble/issues/4)) ([`3d1fe16`](https://github.com/hunterjm/ac-infinity-ble/commit/3d1fe1631d53b9e337075d9d21ccb60df0cacd78))
+
 ## v0.3.0 (2023-07-14)
 
 ### Feature
