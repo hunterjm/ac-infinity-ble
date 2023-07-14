@@ -2,6 +2,12 @@
 
 <!--next-version-placeholder-->
 
+## v0.2.0 (2023-07-14)
+
+### Feature
+
+* Update ble device and adv data ([#2](https://github.com/hunterjm/ac-infinity-ble/issues/2)) ([`6c46276`](https://github.com/hunterjm/ac-infinity-ble/commit/6c4627638194b5d5a593120864c7ea760df3c510))
+
 ## v0.1.0 (2023-07-14)
 
 ### Feature
