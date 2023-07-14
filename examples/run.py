@@ -26,25 +26,13 @@ async def run() -> None:
     scanner.register_detection_callback(on_detected)
     await scanner.start()
 
-    def on_state_changed(state: DeviceInfo, type: CallbackType) -> None:
+    def on_state_changed(state: DeviceInfo, _: CallbackType) -> None:
         _LOGGER.info("State changed: %s", state)
 
     device, adv = await future
     controller = ACInfinityController(device, advertisement_data=adv)
     cancel_callback = controller.register_callback(on_state_changed)
     await controller.update()
-    await asyncio.sleep(3)
-    _LOGGER.info("Setting speed to 7")
-    await controller.set_speed(7)
-    _LOGGER.info("Turn off")
-    await controller.turn_off()
-    _LOGGER.info("Turn on")
-    await controller.turn_on()
-    _LOGGER.info("Setting speed to 6")
-    await controller.set_speed(6)
-    await asyncio.sleep(3)
-    await controller.update()
-    await asyncio.sleep(3)
     cancel_callback()
     await scanner.stop()
 
