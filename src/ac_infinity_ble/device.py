@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable
+from dataclasses import asdict, replace
 
 from bleak.backends.device import BLEDevice
 from bleak.backends.scanner import AdvertisementData
@@ -61,7 +62,22 @@ class ACInfinityController:
         self.loop = asyncio.get_running_loop()
         self._callbacks: list[Callable[[DeviceInfo], None]] = []
         self._sequence = 1
-        _LOGGER.debug(self._state)
+
+    def set_ble_device_and_advertisement_data(
+        self, ble_device: BLEDevice, advertisement_data: AdvertisementData
+    ) -> None:
+        """Set the ble device."""
+        self._ble_device = ble_device
+        self._advertisement_data = advertisement_data
+        info = parse_manufacturer_data(
+            advertisement_data.manufacturer_data[MANUFACTURER_ID]
+        )
+        self._state = replace(self._state, **asdict(info))
+        if self._state.fan:
+            if self._state.level_off or 0 > self._state.fan:
+                self._state.level_off = self._state.fan
+            if self._state.level_on or 10 < self._state.fan:
+                self._state.level_on = self._state.fan
 
     @property
     def address(self) -> str:
