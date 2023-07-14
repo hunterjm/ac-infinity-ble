@@ -2,6 +2,12 @@
 
 <!--next-version-placeholder-->
 
+## v0.3.0 (2023-07-14)
+
+### Feature
+
+* Only fire callback on update ([#3](https://github.com/hunterjm/ac-infinity-ble/issues/3)) ([`a1f90ca`](https://github.com/hunterjm/ac-infinity-ble/commit/a1f90ca290a5492db780fe79b28b6ff9783ac8fa))
+
 ## v0.2.0 (2023-07-14)
 
 ### Feature
