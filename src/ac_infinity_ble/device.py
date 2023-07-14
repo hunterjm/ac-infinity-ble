@@ -74,7 +74,9 @@ class ACInfinityController:
         info = parse_manufacturer_data(
             advertisement_data.manufacturer_data[MANUFACTURER_ID]
         )
-        self._state = replace(self._state, **asdict(info))
+        self._state = replace(
+            self._state, **{k: v for k, v in asdict(info).items() if v is not None}
+        )
         if self._state.fan:
             if self._state.level_off or 0 > self._state.fan:
                 self._state.level_off = self._state.fan
