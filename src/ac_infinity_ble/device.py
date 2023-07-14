@@ -5,6 +5,7 @@ import logging
 from collections.abc import Callable
 from dataclasses import asdict, replace
 
+import async_timeout
 from bleak.backends.device import BLEDevice
 from bleak.backends.scanner import AdvertisementData
 from bleak.backends.service import BleakGATTCharacteristic, BleakGATTServiceCollection
@@ -22,6 +23,7 @@ from .const import (
     MANUFACTURER_ID,
     POSSIBLE_READ_CHARACTERISTIC_UUIDS,
     POSSIBLE_WRITE_CHARACTERISTIC_UUIDS,
+    CallbackType,
 )
 from .exceptions import CharacteristicMissingError
 from .models import DeviceInfo
@@ -60,7 +62,7 @@ class ACInfinityController:
         self._protocol: Protocol = Protocol()
         self._expected_disconnect = False
         self.loop = asyncio.get_running_loop()
-        self._callbacks: list[Callable[[DeviceInfo], None]] = []
+        self._callbacks: list[Callable[[DeviceInfo, CallbackType], None]] = []
         self._sequence = 1
 
     def set_ble_device_and_advertisement_data(
@@ -136,10 +138,25 @@ class ACInfinityController:
 
     async def update(self) -> None:
         """Update the controller."""
+        events = {
+            CallbackType.NOTIFICATION: asyncio.Event(),
+            CallbackType.UPDATE_RESPONSE: asyncio.Event(),
+        }
+
+        def on_event(_: DeviceInfo, type: CallbackType) -> None:
+            events[type].set()
+
+        cancel_callback = self.register_callback(on_event)
+
         await self._ensure_connected()
         _LOGGER.debug("%s: Updating", self.name)
         command = self._protocol.get_model_data(self._state.type, 0, self.sequence)
         await self._send_command([command])
+
+        async with async_timeout.timeout(5):
+            await events[CallbackType.NOTIFICATION].wait()
+            await events[CallbackType.UPDATE_RESPONSE].wait()
+        cancel_callback()
 
     async def turn_on(self) -> None:
         """Turn on the controller."""
@@ -181,13 +198,13 @@ class ACInfinityController:
         _LOGGER.debug("%s: Stop", self.name)
         await self._execute_disconnect()
 
-    def _fire_callbacks(self) -> None:
+    def _fire_callbacks(self, type: CallbackType) -> None:
         """Fire the callbacks."""
         for callback in self._callbacks:
-            callback(self._state)
+            callback(self._state, type)
 
     def register_callback(
-        self, callback: Callable[[DeviceInfo], None]
+        self, callback: Callable[[DeviceInfo, CallbackType], None]
     ) -> Callable[[], None]:
         """Register a callback to be called when the state changes."""
 
@@ -253,6 +270,7 @@ class ACInfinityController:
             self._state.fan_state = get_bits(data[16], 0, 2)
             # self._state.fan = get_bits(data[17], 0, 4) # Not accurate
             self._state.work_type = get_bits(data[17], 4, 4)
+            self._fire_callbacks(CallbackType.NOTIFICATION)
 
         if data[0] == 0xA5 and data[1] == 0x17 and len(data) == 63:
             self._state.work_type = data[12]
@@ -262,8 +280,7 @@ class ACInfinityController:
                 self._state.fan = self._state.level_off
             if self._state.work_type == 2:
                 self._state.fan = self._state.level_on
-
-        self._fire_callbacks()
+            self._fire_callbacks(CallbackType.UPDATE_RESPONSE)
 
     def _reset_disconnect_timer(self) -> None:
         """Reset disconnect timer."""
