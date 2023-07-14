@@ -97,11 +97,15 @@ class Protocol:
             command += [255, b]
         return self._add_head(command, 1, sequence)
 
-    def set_level(self, work_type: int, level: int, b: int, sequence: int) -> bytes:
+    def set_level(
+        self, type: int, work_type: int, level: int, b: int, sequence: int
+    ) -> bytes:
         if work_type not in [1, 2]:
             raise ValueError("Work type must be 1 (off) or 2 (on)")
         if level not in range(0, 11):
             raise ValueError("Level must be between 0 and 10")
-        return self._add_head(
-            [16, 1, work_type, work_type + 16, 1, level, 255, b], 3, sequence
-        )
+
+        command = [16, 1, work_type, work_type + 16, 1, level]
+        if type in [7, 9, 11, 12]:
+            command += [255, b]
+        return self._add_head(command, 3, sequence)

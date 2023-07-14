@@ -165,7 +165,9 @@ class ACInfinityController:
         self._state.work_type = 2
         self._state.fan = self._state.level_on or 10
         self._state.level_on = self._state.fan
-        command = self._protocol.set_level(2, self._state.level_on, 0, self.sequence)
+        command = self._protocol.set_level(
+            self._state.type, 2, self._state.level_on, 0, self.sequence
+        )
         await self._send_command([command])
 
     async def turn_off(self) -> None:
@@ -175,7 +177,9 @@ class ACInfinityController:
         self._state.work_type = 1
         self._state.fan = self._state.level_off or 0
         self._state.level_off = self._state.fan
-        command = self._protocol.set_level(1, self._state.level_off, 0, self.sequence)
+        command = self._protocol.set_level(
+            self._state.type, 1, self._state.level_off, 0, self.sequence
+        )
         await self._send_command([command])
 
     async def set_speed(self, speed: int) -> None:
@@ -189,7 +193,7 @@ class ACInfinityController:
         else:
             self._state.level_on = speed
         command = self._protocol.set_level(
-            self._state.work_type, speed, 0, self.sequence
+            self._state.type, self._state.work_type, speed, 0, self.sequence
         )
         await self._send_command([command])
 
