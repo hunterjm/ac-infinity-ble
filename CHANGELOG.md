@@ -2,6 +2,12 @@
 
 <!--next-version-placeholder-->
 
+## v0.4.1 (2023-07-14)
+
+### Fix
+
+* Do not replace None values in state on new adv data ([`96a124c`](https://github.com/hunterjm/ac-infinity-ble/commit/96a124c2c672a9a834a041aff97b3d2edb85de08))
+
 ## v0.4.0 (2023-07-14)
 
 ### Feature
