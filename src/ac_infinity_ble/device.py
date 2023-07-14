@@ -240,6 +240,8 @@ class ACInfinityController:
         """Handle notification responses."""
         _LOGGER.debug("%s: Notification received: %s", self.name, data.hex())
 
+        updated = False
+
         if data[0] == 0x1E and data[1] == 0xFF:
             self._state.is_degree = get_bit(data[6], 0)
             self._state.tmp_state = get_bits(data[6], 1, 2)
@@ -253,6 +255,7 @@ class ACInfinityController:
             self._state.fan_state = get_bits(data[16], 0, 2)
             # self._state.fan = get_bits(data[17], 0, 4) # Not accurate
             self._state.work_type = get_bits(data[17], 4, 4)
+            updated = True
 
         if data[0] == 0xA5 and data[1] == 0x17 and len(data) == 63:
             self._state.work_type = data[12]
@@ -262,8 +265,10 @@ class ACInfinityController:
                 self._state.fan = self._state.level_off
             if self._state.work_type == 2:
                 self._state.fan = self._state.level_on
+            updated = True
 
-        self._fire_callbacks()
+        if updated:
+            self._fire_callbacks()
 
     def _reset_disconnect_timer(self) -> None:
         """Reset disconnect timer."""
