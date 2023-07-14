@@ -5,7 +5,7 @@ from bleak import BleakScanner
 from bleak.backends.device import BLEDevice
 from bleak.backends.scanner import AdvertisementData
 
-from ac_infinity_ble import ACInfinityController, DeviceInfo
+from ac_infinity_ble import ACInfinityController, CallbackType, DeviceInfo
 from ac_infinity_ble.const import MANUFACTURER_ID
 
 _LOGGER = logging.getLogger(__name__)
@@ -26,7 +26,7 @@ async def run() -> None:
     scanner.register_detection_callback(on_detected)
     await scanner.start()
 
-    def on_state_changed(state: DeviceInfo) -> None:
+    def on_state_changed(state: DeviceInfo, type: CallbackType) -> None:
         _LOGGER.info("State changed: %s", state)
 
     device, adv = await future
