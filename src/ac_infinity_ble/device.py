@@ -158,13 +158,18 @@ class ACInfinityController:
             await events[CallbackType.UPDATE_RESPONSE].wait()
         cancel_callback()
 
-    async def turn_on(self) -> None:
+    async def turn_on(self, speed: int | None = None) -> None:
         """Turn on the controller."""
         await self._ensure_connected()
         _LOGGER.debug("%s: Turn on", self.name)
         self._state.work_type = 2
-        self._state.fan = self._state.level_on or 10
-        self._state.level_on = self._state.fan
+        if speed is not None:
+            self._state.fan = speed
+            self._state.level_on = speed
+        else:
+            self._state.fan = self._state.level_on or 10
+            self._state.level_on = self._state.fan
+
         command = self._protocol.set_level(
             self._state.type, 2, self._state.level_on, 0, self.sequence
         )
