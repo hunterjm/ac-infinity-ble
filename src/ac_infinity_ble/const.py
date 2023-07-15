@@ -15,5 +15,6 @@ POSSIBLE_READ_CHARACTERISTIC_UUIDS = [
 class CallbackType(Enum):
     """Callback type."""
 
-    NOTIFICATION = 1
-    UPDATE_RESPONSE = 2
+    ADVERTISEMENT = 1
+    NOTIFICATION = 2
+    UPDATE_RESPONSE = 3
