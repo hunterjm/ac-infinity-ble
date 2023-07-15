@@ -63,6 +63,7 @@ class ACInfinityController:
         self._expected_disconnect = False
         self.loop = asyncio.get_running_loop()
         self._callbacks: list[Callable[[DeviceInfo, CallbackType], None]] = []
+        self._notify_future: asyncio.Future[bytearray] | None = None
         self._sequence = 1
 
     def set_ble_device_and_advertisement_data(
@@ -82,6 +83,7 @@ class ACInfinityController:
                 self._state.level_off = self._state.fan
             if self._state.level_on or 10 < self._state.fan:
                 self._state.level_on = self._state.fan
+        self._fire_callbacks(CallbackType.ADVERTISEMENT)
 
     @property
     def address(self) -> str:
@@ -140,25 +142,19 @@ class ACInfinityController:
 
     async def update(self) -> None:
         """Update the controller."""
-        events = {
-            CallbackType.NOTIFICATION: asyncio.Event(),
-            CallbackType.UPDATE_RESPONSE: asyncio.Event(),
-        }
-
-        def on_event(_: DeviceInfo, type: CallbackType) -> None:
-            events[type].set()
-
-        cancel_callback = self.register_callback(on_event)
-
         await self._ensure_connected()
         _LOGGER.debug("%s: Updating", self.name)
         command = self._protocol.get_model_data(self._state.type, 0, self.sequence)
-        await self._send_command([command])
-
-        async with async_timeout.timeout(5):
-            await events[CallbackType.NOTIFICATION].wait()
-            await events[CallbackType.UPDATE_RESPONSE].wait()
-        cancel_callback()
+        if data := await self._send_command(command):
+            self._state.work_type = data[12]
+            self._state.level_off = data[15]
+            self._state.level_on = data[18]
+            if self._state.work_type == 1:
+                self._state.fan = self._state.level_off
+            if self._state.work_type == 2:
+                self._state.fan = self._state.level_on
+            self._fire_callbacks(CallbackType.UPDATE_RESPONSE)
+        await self._execute_disconnect()
 
     async def turn_on(self, speed: int | None = None) -> None:
         """Turn on the controller."""
@@ -175,7 +171,8 @@ class ACInfinityController:
         command = self._protocol.set_level(
             self._state.type, 2, self._state.level_on, 0, self.sequence
         )
-        await self._send_command([command])
+        await self._send_command(command)
+        await self._execute_disconnect()
 
     async def turn_off(self) -> None:
         """Turn off the controller."""
@@ -187,7 +184,8 @@ class ACInfinityController:
         command = self._protocol.set_level(
             self._state.type, 1, self._state.level_off, 0, self.sequence
         )
-        await self._send_command([command])
+        await self._send_command(command)
+        await self._execute_disconnect()
 
     async def set_speed(self, speed: int) -> None:
         """Set the speed of the controller."""
@@ -202,7 +200,8 @@ class ACInfinityController:
         command = self._protocol.set_level(
             self._state.type, self._state.work_type, speed, 0, self.sequence
         )
-        await self._send_command([command])
+        await self._send_command(command)
+        await self._execute_disconnect()
 
     async def stop(self) -> None:
         """Stop the controller."""
@@ -267,6 +266,9 @@ class ACInfinityController:
     def _notification_handler(self, _sender: int, data: bytearray) -> None:
         """Handle notification responses."""
         _LOGGER.debug("%s: Notification received: %s", self.name, data.hex())
+        if self._notify_future and not self._notify_future.done():
+            self._notify_future.set_result(data)
+            return
 
         if data[0] == 0x1E and data[1] == 0xFF:
             self._state.is_degree = get_bit(data[6], 0)
@@ -282,16 +284,6 @@ class ACInfinityController:
             # self._state.fan = get_bits(data[17], 0, 4) # Not accurate
             self._state.work_type = get_bits(data[17], 4, 4)
             self._fire_callbacks(CallbackType.NOTIFICATION)
-
-        if data[0] == 0xA5 and data[1] == 0x17 and len(data) == 63:
-            self._state.work_type = data[12]
-            self._state.level_off = data[15]
-            self._state.level_on = data[18]
-            if self._state.work_type == 1:
-                self._state.fan = self._state.level_off
-            if self._state.work_type == 2:
-                self._state.fan = self._state.level_on
-            self._fire_callbacks(CallbackType.UPDATE_RESPONSE)
 
     def _reset_disconnect_timer(self) -> None:
         """Reset disconnect timer."""
@@ -343,10 +335,10 @@ class ACInfinityController:
                 await client.disconnect()
 
     @retry_bluetooth_connection_error(DEFAULT_ATTEMPTS)
-    async def _send_command_locked(self, commands: list[bytes]) -> None:
+    async def _send_command_locked(self, command: bytes) -> bytes | None:
         """Send command to device and read response."""
         try:
-            await self._execute_command_locked(commands)
+            return await self._execute_command_locked(command)
         except BleakDBusError as ex:
             # Disconnect so we can reset state and try again
             await asyncio.sleep(BLEAK_BACKOFF_TIME)
@@ -368,22 +360,20 @@ class ACInfinityController:
             raise
 
     async def _send_command(
-        self, commands: list[bytes] | bytes, retry: int | None = None
-    ) -> None:
+        self, command: bytes, retry: int | None = None
+    ) -> bytes | None:
         """Send command to device and read response."""
         await self._ensure_connected()
-        if not isinstance(commands, list):
-            commands = [commands]
-        await self._send_command_while_connected(commands, retry)
+        return await self._send_command_while_connected(command, retry)
 
     async def _send_command_while_connected(
-        self, commands: list[bytes], retry: int | None = None
-    ) -> None:
+        self, command: bytes, retry: int | None = None
+    ) -> bytes | None:
         """Send command to device and read response."""
         _LOGGER.debug(
-            "%s: Sending commands %s",
+            "%s: Sending command %s",
             self.name,
-            [command.hex() for command in commands],
+            command.hex(),
         )
         if self._operation_lock.locked():
             _LOGGER.debug(
@@ -393,8 +383,7 @@ class ACInfinityController:
             )
         async with self._operation_lock:
             try:
-                await self._send_command_locked(commands)
-                return
+                return await self._send_command_locked(command)
             except BleakNotFoundError:
                 _LOGGER.error(
                     "%s: device not found, no longer in range, or poor RSSI: %s",
@@ -418,15 +407,23 @@ class ACInfinityController:
 
         raise RuntimeError("Unreachable")
 
-    async def _execute_command_locked(self, commands: list[bytes]) -> None:
+    async def _execute_command_locked(self, command: bytes) -> bytes:
         """Execute command and read response."""
         assert self._client is not None  # nosec
         if not self._read_char:
             raise CharacteristicMissingError("Read characteristic missing")
         if not self._write_char:
             raise CharacteristicMissingError("Write characteristic missing")
-        for command in commands:
-            await self._client.write_gatt_char(self._write_char, command, False)
+
+        self._notify_future = asyncio.Future()
+        await self._client.write_gatt_char(self._write_char, command, False)
+
+        notify_msg = None
+        async with async_timeout.timeout(5):
+            notify_msg = await self._notify_future
+
+        self._notify_future = None
+        return notify_msg
 
     def _resolve_characteristics(self, services: BleakGATTServiceCollection) -> bool:
         """Resolve characteristics."""
