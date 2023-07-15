@@ -419,7 +419,7 @@ class ACInfinityController:
         await self._client.write_gatt_char(self._write_char, command, False)
 
         notify_msg = None
-        async with async_timeout(5):
+        async with async_timeout.timeout(5):
             notify_msg = await self._notify_future
 
         self._notify_future = None
