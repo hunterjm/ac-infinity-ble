@@ -2,6 +2,12 @@
 
 <!--next-version-placeholder-->
 
+## v0.4.2 (2023-07-15)
+
+### Fix
+
+* Only send one command at a time and wait for response ([#5](https://github.com/hunterjm/ac-infinity-ble/issues/5)) ([`495f44e`](https://github.com/hunterjm/ac-infinity-ble/commit/495f44e0f51a373e52d0148255d96a3e68efb908))
+
 ## v0.4.1 (2023-07-14)
 
 ### Fix
