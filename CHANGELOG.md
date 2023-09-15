@@ -2,6 +2,12 @@
 
 <!--next-version-placeholder-->
 
+## v0.4.3 (2023-09-15)
+
+### Fix
+
+* Bleak has looser version requirements ([#8](https://github.com/hunterjm/ac-infinity-ble/issues/8)) ([`192768e`](https://github.com/hunterjm/ac-infinity-ble/commit/192768e0a43701bb111496c71e72849f56ace3c0))
+
 ## v0.4.2 (2023-07-15)
 
 ### Fix
