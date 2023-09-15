@@ -24,8 +24,8 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "^3.10"
-bleak = "^0.20.2"
-bleak-retry-connector = "^3.0.2"
+bleak = ">=0.20.2"
+bleak-retry-connector = ">=3.0.2"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.0"
