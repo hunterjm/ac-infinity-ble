@@ -1,21 +1,13 @@
-# Welcome to AC Infinity BLE documentation!
+# AC Infinity BLE documentation
 
-```{toctree}
-:caption: Installation & Usage
-:maxdepth: 2
+Read these Markdown guides directly on GitHub or in your editor:
 
-installation
-usage
-```
+- [Installation and upgrades](installation.md)
+- [Usage and examples](usage.md)
+- [Bluetooth protocol and compatibility](protocol-validation.md)
+- [Architecture](architecture.md)
+- [Testing](testing.md)
+- [Changelog](../CHANGELOG.md)
+- [Contributing and releases](../CONTRIBUTING.md)
 
-```{toctree}
-:caption: Project Info
-:maxdepth: 2
-
-changelog
-contributing
-```
-
-```{include} ../README.md
-
-```
+See the [project README](../README.md) for an overview.

@@ -1,3 +1,6 @@
+"""Read one controller without changing settings: python examples/run.py --help."""
+
+import argparse
 import asyncio
 import logging
 
@@ -7,37 +10,58 @@ from bleak.backends.scanner import AdvertisementData
 
 from ac_infinity_ble import ACInfinityController, CallbackType, DeviceInfo
 from ac_infinity_ble.const import MANUFACTURER_ID
+from ac_infinity_ble.protocol import parse_manufacturer_data
 
 _LOGGER = logging.getLogger(__name__)
 
 
-async def run() -> None:
-    scanner = BleakScanner()
-    future: asyncio.Future[BLEDevice] = asyncio.Future()
+async def run(address: str | None = None, timeout: float = 30) -> None:
+    """Bound discovery and release the scanner and controller on every exit."""
+    future: asyncio.Future[tuple[BLEDevice, AdvertisementData]] = (
+        asyncio.get_running_loop().create_future()
+    )
 
     def on_detected(device: BLEDevice, adv: AdvertisementData) -> None:
-        if future.done():
+        if future.done() or (address and device.address.lower() != address.lower()):
             return
-        _LOGGER.info("Detected: %s", device)
-        if adv.manufacturer_data.get(MANUFACTURER_ID):
-            _LOGGER.info("Found device: %s", device.address)
-            future.set_result((device, adv))
+        try:
+            parse_manufacturer_data(adv.manufacturer_data[MANUFACTURER_ID])
+        except (KeyError, ValueError):
+            return
+        future.set_result((device, adv))
 
-    scanner.register_detection_callback(on_detected)
-    await scanner.start()
+    async with BleakScanner(detection_callback=on_detected):
+        async with asyncio.timeout(timeout):
+            device, adv = await future
 
-    def on_state_changed(state: DeviceInfo, type: CallbackType) -> None:
-        _LOGGER.info("Callback Type: %s; State changed: %s", type, state)
-
-    device, adv = await future
     controller = ACInfinityController(device, advertisement_data=adv)
-    cancel_callback = controller.register_callback(on_state_changed)
-    await controller.update()
-    asyncio.sleep(5)
-    cancel_callback()
-    await scanner.stop()
+
+    def on_state_changed(state: DeviceInfo, kind: CallbackType) -> None:
+        _LOGGER.info("%s: %s", kind, state)
+
+    remove_callback = controller.register_callback(on_state_changed)
+    try:
+        _LOGGER.info("Discovered: %s", controller.state)
+        await controller.update()
+        if controller.state.profile.writable:
+            await controller.refresh_telemetry()
+    finally:
+        remove_callback()
+        await controller.stop()
 
 
-logging.basicConfig(level=logging.INFO)
-logging.getLogger("ac_infinity_ble").setLevel(logging.DEBUG)
-asyncio.run(run())
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--address", help="Bluetooth address (or macOS UUID)")
+    parser.add_argument(
+        "--timeout", type=float, default=30, help="Scan timeout in seconds"
+    )
+    args = parser.parse_args()
+    if args.timeout <= 0:
+        parser.error("--timeout must be positive")
+    logging.basicConfig(level=logging.INFO)
+    asyncio.run(run(args.address, args.timeout))
+
+
+if __name__ == "__main__":
+    main()
