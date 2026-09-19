@@ -9,6 +9,8 @@
 - Read actual Bluetooth revisions and expose immutable state snapshots, named
   controller modes and specific protocol errors.
 - Preserve saved limits, including packed manual/maximum levels on newer protocols.
+- Invalidate saved settings and reject pending acknowledgements when a port's
+  connected load identity changes.
 - Serialize connection cleanup, recover supported service caches, and add bounded
   notification-only refreshes with deterministic shutdown.
 - Replace Python formatting/lint tools with Ruff, modernize CI and release

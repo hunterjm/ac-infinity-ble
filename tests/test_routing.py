@@ -178,18 +178,59 @@ def test_telemetry_does_not_transfer_presets_between_replaced_loads():
     )
 
 
+@pytest.mark.parametrize("raw_type", [1, 2])
+def test_telemetry_retains_settings_only_for_unchanged_load_identity(raw_type):
+    async def exercise():
+        controller = make_controller()
+        controller._state = parse_telemetry(
+            two_fan_telemetry(), DeviceInfo(11, "Test", 8)
+        )
+        ports = dict(controller.state.ports)
+        ports[1] = replace(ports[1], level_on=8, level_off=2, raw_on_parameter=0x89)
+        controller._state = replace(controller.state, ports=ports)
+        frame = two_fan_telemetry()
+        frame[22:24] = raw_type.to_bytes(2, "big")
+        frame[24] = 4 << 2
+
+        controller._notification_handler(0, frame)
+
+        current = controller.state.ports[1]
+        assert current.kind == "fan"
+        assert current.raw_type == raw_type
+        assert current.level == 4
+        assert (current.level_on, current.level_off, current.raw_on_parameter) == (
+            (8, 2, 0x89) if raw_type == 1 else (None, None, None)
+        )
+        assert controller.state.ports[2] == ports[2]
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("version", [6, 8])
 @pytest.mark.parametrize(
     "replacement",
-    [None, PortState(1, connected=False, kind="fan"), PortState(1, kind="light")],
+    [
+        None,
+        PortState(1, connected=False, kind="fan"),
+        PortState(1, kind="light"),
+        PortState(1, kind="fan", raw_type=2, level=2),
+    ],
 )
-def test_command_ack_cannot_restore_a_removed_or_changed_load(replacement):
+def test_command_ack_cannot_restore_a_removed_or_changed_load(replacement, version):
     async def exercise():
         controller = make_controller()
         controller._state = DeviceInfo(
-            11, "Test", 6, ports={1: PortState(1, kind="fan", level=3)}
+            11,
+            "Test",
+            version,
+            ports={1: PortState(1, kind="fan", raw_type=1, level=3)},
         )
 
         async def send(command):
+            if command[8:10] == b"\x00\x01":
+                return response_frame(
+                    b"\x10\x01\x02\x11\x01\x02\x12\x01\x89\xff\x01", command=1
+                )
             controller._state = replace(
                 controller._state, ports={} if replacement is None else {1: replacement}
             )

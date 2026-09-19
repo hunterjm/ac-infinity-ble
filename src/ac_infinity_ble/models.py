@@ -29,7 +29,7 @@ class PortState:
             previous is not None
             and self.connected
             and previous.connected
-            and previous.kind in (None, self.kind)
+            and (previous.kind, previous.raw_type) == (self.kind, self.raw_type)
         ):
             return replace(
                 self,

@@ -262,7 +262,7 @@ class ACInfinityController:
         if port and (
             (latest := self._state.ports.get(port)) is None
             or not latest.connected
-            or latest.kind != old.kind
+            or (latest.kind, latest.raw_type) != (old.kind, old.raw_type)
         ):
             raise ValueError("Port changed while the command was pending")
         old = self._state.ports.get(port, old)
