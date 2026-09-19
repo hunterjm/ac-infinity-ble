@@ -4,9 +4,6 @@
   <a href="https://github.com/hunterjm/ac-infinity-ble/actions/workflows/ci.yml?query=branch%3Amain">
     <img src="https://img.shields.io/github/actions/workflow/status/hunterjm/ac-infinity-ble/ci.yml?branch=main&label=CI&logo=github&style=flat-square" alt="CI Status" >
   </a>
-  <a href="https://ac-infinity-ble.readthedocs.io">
-    <img src="https://img.shields.io/readthedocs/ac-infinity-ble.svg?logo=read-the-docs&logoColor=fff&style=flat-square" alt="Documentation Status">
-  </a>
   <a href="https://codecov.io/gh/hunterjm/ac-infinity-ble">
     <img src="https://img.shields.io/codecov/c/github/hunterjm/ac-infinity-ble.svg?logo=codecov&logoColor=fff&style=flat-square" alt="Test coverage percentage">
   </a>
@@ -53,7 +50,8 @@ seconds; always await `controller.stop()` when finished.
 Build with `poetry build`, or install a checkout with `pip install -e .` for
 development.
 
-See [installation and upgrade notes](docs/installation.md) and the
+Read the [documentation](docs/index.md) directly in this repository. See
+[installation and upgrade notes](docs/installation.md) and the
 [usage guide](docs/usage.md) for the bounded scanner example, immutable state,
 per-port controls and cleanup. Home Assistant targets 30-second port telemetry
 freshness and five-minute saved-settings refreshes, with background failure

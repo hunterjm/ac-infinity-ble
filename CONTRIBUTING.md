@@ -159,13 +159,16 @@ import sorting (`I`), Python upgrades (`UP`), bugbear (`B`), and unused suppress
 (`RUF100`). Formatting owns whitespace; mypy owns types; Bandit remains separate.
 The baseline avoids enabling unrelated or conflicting rules through `ALL`.
 
+Documentation lives in `docs/` as Markdown and renders directly on GitHub,
+including Mermaid diagrams. Update relative links when moving pages; Prettier
+checks Markdown formatting with the other non-Python files.
+
 ```shell
-poetry install --with docs
+poetry install
 poetry run ruff check .
 poetry run ruff format --check .
 poetry run mypy src tests examples
 poetry run pytest --cov=ac_infinity_ble
-poetry run sphinx-build -W --keep-going -b html docs docs/_build/html
 poetry check --lock
 poetry build
 ```

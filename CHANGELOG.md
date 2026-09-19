@@ -11,8 +11,8 @@
 - Preserve saved limits, including packed manual/maximum levels on newer protocols.
 - Serialize connection cleanup, recover supported service caches, and add bounded
   notification-only refreshes with deterministic shutdown.
-- Replace Python formatting/lint tools with Ruff, modernize CI, documentation
-  builds and release automation, and repair the standalone example.
+- Replace Python formatting/lint tools with Ruff, modernize CI and release
+  automation, document the protocol in Markdown, and repair the standalone example.
 - The companion HA integration adds device-specific controls, schema 1.3 migration,
   30-second port freshness, five-minute settings reads and background backoff.
 

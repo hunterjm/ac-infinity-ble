@@ -5,12 +5,11 @@
 Use Python 3.12 or newer and Poetry 2.4.3:
 
 ```shell
-poetry install --with docs
+poetry install
 poetry run pytest --cov=ac_infinity_ble
 poetry run mypy src tests examples
 poetry run ruff check .
 poetry run ruff format --check .
-poetry run sphinx-build -W --keep-going -b html docs docs/_build/html
 poetry check --lock
 poetry build
 pre-commit run --all-files
@@ -19,6 +18,10 @@ pre-commit run --all-files
 CI runs the library on Python 3.12, 3.13 and 3.14 on Linux and Windows. It also
 installs the built wheel into a fresh environment and imports it outside the
 source checkout, checking packaging independently of editable installs.
+
+Documentation is Markdown rendered directly by GitHub. Prettier checks its
+formatting through pre-commit; check relative links and Mermaid diagrams when
+editing pages. No documentation service or site build is required.
 
 Protocol fixtures cover family/version boundaries, frame length and CRC checks,
 command/sequence matching, fragmented replies, interleaved unsolicited telemetry,
