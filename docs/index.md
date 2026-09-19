@@ -6,6 +6,9 @@
 
 installation
 usage
+protocol-validation
+architecture
+testing
 ```
 
 ```{toctree}
@@ -17,5 +20,7 @@ contributing
 ```
 
 ```{include} ../README.md
+:relative-docs: docs
+:relative-images:
 
 ```

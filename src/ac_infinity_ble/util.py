@@ -1,7 +1,7 @@
 import ctypes
 
 
-def get_short(b: bytes, i: int) -> int:
+def get_short(b: bytes | bytearray, i: int) -> int:
     return ctypes.c_int16((b[i + 1] & 255) | ((b[i] << 8) & 65280)).value
 
 

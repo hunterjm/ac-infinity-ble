@@ -15,8 +15,8 @@
   <a href="https://python-poetry.org/">
     <img src="https://img.shields.io/badge/packaging-poetry-299bd7?style=flat-square&logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAA4AAAASCAYAAABrXO8xAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAJJSURBVHgBfZLPa1NBEMe/s7tNXoxW1KJQKaUHkXhQvHgW6UHQQ09CBS/6V3hKc/AP8CqCrUcpmop3Cx48eDB4yEECjVQrlZb80CRN8t6OM/teagVxYZi38+Yz853dJbzoMV3MM8cJUcLMSUKIE8AzQ2PieZzFxEJOHMOgMQQ+dUgSAckNXhapU/NMhDSWLs1B24A8sO1xrN4NECkcAC9ASkiIJc6k5TRiUDPhnyMMdhKc+Zx19l6SgyeW76BEONY9exVQMzKExGKwwPsCzza7KGSSWRWEQhyEaDXp6ZHEr416ygbiKYOd7TEWvvcQIeusHYMJGhTwF9y7sGnSwaWyFAiyoxzqW0PM/RjghPxF2pWReAowTEXnDh0xgcLs8l2YQmOrj3N7ByiqEoH0cARs4u78WgAVkoEDIDoOi3AkcLOHU60RIg5wC4ZuTC7FaHKQm8Hq1fQuSOBvX/sodmNJSB5geaF5CPIkUeecdMxieoRO5jz9bheL6/tXjrwCyX/UYBUcjCaWHljx1xiX6z9xEjkYAzbGVnB8pvLmyXm9ep+W8CmsSHQQY77Zx1zboxAV0w7ybMhQmfqdmmw3nEp1I0Z+FGO6M8LZdoyZnuzzBdjISicKRnpxzI9fPb+0oYXsNdyi+d3h9bm9MWYHFtPeIZfLwzmFDKy1ai3p+PDls1Llz4yyFpferxjnyjJDSEy9CaCx5m2cJPerq6Xm34eTrZt3PqxYO1XOwDYZrFlH1fWnpU38Y9HRze3lj0vOujZcXKuuXm3jP+s3KbZVra7y2EAAAAAASUVORK5CYII=" alt="Poetry">
   </a>
-  <a href="https://github.com/ambv/black">
-    <img src="https://img.shields.io/badge/code%20style-black-000000.svg?style=flat-square" alt="black">
+  <a href="https://docs.astral.sh/ruff/">
+    <img src="https://img.shields.io/badge/code%20style-Ruff-D7FF64.svg?style=flat-square" alt="Ruff">
   </a>
   <a href="https://github.com/pre-commit/pre-commit">
     <img src="https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white&style=flat-square" alt="pre-commit">
@@ -37,6 +37,29 @@ AC Infinity BLE Controller
 Install this via pip (or your favourite package manager):
 
 `pip install ac-infinity-ble`
+
+## Protocol and compatibility
+
+The library requires Python 3.12+, Bleak 3.0.2+ (3.x), and
+bleak-retry-connector 4.7.0+ (4.x). See the [APK-derived protocol documentation](docs/protocol-validation.md)
+for frame layouts, device families, control coverage, and hardware validation.
+The [architecture](docs/architecture.md) describes family routing,
+multiport state, Bluetooth revision reads, and Home Assistant identity/migration.
+
+Commands validate length, both CRCs, command and sequence while unsolicited
+telemetry continues updating state. Connections are released after five idle
+seconds; always await `controller.stop()` when finished.
+
+Build with `poetry build`, or install a checkout with `pip install -e .` for
+development.
+
+See [installation and upgrade notes](docs/installation.md) and the
+[usage guide](docs/usage.md) for the bounded scanner example, immutable state,
+per-port controls and cleanup. Home Assistant targets 30-second port telemetry
+freshness and five-minute saved-settings refreshes, with background failure
+backoff and no delay imposed on user commands. Ruff handles Python lint/format;
+Prettier retains non-Python formatting. See [contributing](CONTRIBUTING.md) for
+rule choices, CI checks and the release dry run.
 
 ## Contributors ✨
 

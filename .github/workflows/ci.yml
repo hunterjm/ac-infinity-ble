@@ -2,85 +2,111 @@ name: CI
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
-  group: ${{ github.head_ref || github.run_id }}
-  cancel-in-progress: true
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
-          python-version: "3.10"
+          python-version: "3.12"
+      - run: pip install poetry==2.4.3
+      - run: poetry install
+      - run: poetry check --lock
+      - run: poetry run ruff check .
+      - run: poetry run ruff format --check .
+      - run: poetry run mypy src tests examples
       - uses: pre-commit/action@v3.0.0
 
-  # Make sure commit messages follow the conventional commits convention:
-  # https://www.conventionalcommits.org
   commitlint:
-    name: Lint Commit Messages
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - uses: wagoid/commitlint-github-action@v5.4.1
+      - uses: wagoid/commitlint-github-action@v6
 
   test:
     strategy:
       fail-fast: false
       matrix:
-        python-version:
-          - "3.10"
-          - "3.11"
-          # - "3.12-dev"
-        os:
-          - ubuntu-latest
+        python-version: ["3.12", "3.13", "3.14"]
+        os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v3
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-      - uses: snok/install-poetry@v1.3.3
-      - name: Install Dependencies
-        run: poetry install
+      - run: pip install poetry==2.4.3
+      - run: poetry install
+      - run: poetry run pytest --cov=ac_infinity_ble --cov-report=xml
+      - name: Build and test the installed wheel outside the source directory
         shell: bash
-      - name: Test with Pytest
-        run: poetry run pytest --cov-report=xml
-        shell: bash
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+        run: |
+          poetry build
+          python -m venv "$RUNNER_TEMP/wheel-test"
+          if [ "$RUNNER_OS" = Windows ]; then PY="$RUNNER_TEMP/wheel-test/Scripts/python.exe"; else PY="$RUNNER_TEMP/wheel-test/bin/python"; fi
+          "$PY" -m pip install dist/*.whl
+          cd "$RUNNER_TEMP"
+          "$PY" -c 'from ac_infinity_ble import ACInfinityController, DeviceInfo; from importlib.metadata import version; assert version("ac-infinity-ble"); assert DeviceInfo(11, "Test", 7).profile.addressed'
+      - uses: codecov/codecov-action@v5
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.14'
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install poetry==2.4.3
+      - run: poetry install --with docs
+      - run: poetry run sphinx-build -W --keep-going -b html docs docs/_build/html
+
   release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [lint, commitlint, test, docs]
     runs-on: ubuntu-latest
     environment: release
-    needs:
-      - test
-      - lint
-      - commitlint
-
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-
-      - name: Release
-        uses: relekang/python-semantic-release@v7.34.6
-        if: github.ref_name == 'main'
+      - uses: actions/setup-python@v6
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          pypi_token: ${{ secrets.PYPI_TOKEN }}
-      - name: Test release
-        uses: relekang/python-semantic-release@v7.34.6
-        if: github.ref_name != 'main'
-        with:
-          additional_options: --noop
+          python-version: "3.12"
+      - run: pip install poetry==2.4.3 python-semantic-release==10.6.2 twine
+      - name: Preview release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: semantic-release --noop version
+      - name: Version, build and create GitHub release
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: semantic-release version
+      - name: Publish built distributions to PyPI
+        if: steps.release.outputs.released == 'true'
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+        run: python -m twine upload dist/*

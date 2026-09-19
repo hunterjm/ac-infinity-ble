@@ -1,5 +1,21 @@
 # Changelog
 
+
+## Unreleased
+
+- Require Python 3.12+, Bleak 3.x and retry-connector 4.x; test Python 3.12–3.14.
+- Validate command length, CRCs, command and sequence independently of telemetry.
+- Route APK-verified device families and support independent connected outputs.
+- Read actual Bluetooth revisions and expose immutable state snapshots, named
+  controller modes and specific protocol errors.
+- Preserve saved limits, including packed manual/maximum levels on newer protocols.
+- Serialize connection cleanup, recover supported service caches, and add bounded
+  notification-only refreshes with deterministic shutdown.
+- Replace Python formatting/lint tools with Ruff, modernize CI, documentation
+  builds and release automation, and repair the standalone example.
+- The companion HA integration adds device-specific controls, schema 1.3 migration,
+  30-second port freshness, five-minute settings reads and background backoff.
+
 <!--next-version-placeholder-->
 
 ## v0.4.3 (2023-09-15)
