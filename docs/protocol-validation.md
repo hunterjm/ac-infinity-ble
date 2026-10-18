@@ -94,6 +94,9 @@ publishing local success.
 | H4                                                    | `7 + uint16_be[5:7]`       | Explicit port IDs in eleven-byte records; sensor ordering block; five-byte sensor records                                    |
 | Home appliances                                       | `6 + byte[5]`, at least 28 | Level in high nibble of 7; inside/outside temperature at 12/14; power measurement at 16; work mode at 23                     |
 
+Airtap (type 6) legacy frames carry the root level in the high nibble of byte 17,
+next to the work mode in its low nibble.
+
 Legacy/v6 climate measurements are signed 16-bit values in hundredths; `8000`
 means missing. The home appliance's power _measurement_ is not its power-switch
 state. AI sensor records specify their own accuracy: multiply by 10, 1, 0.1,
@@ -197,11 +200,34 @@ Retries reconnect before writing, and disconnect callbacks wake pending requests
 Partial connection/subscription failures, config-flow failures, integration
 unload, and failed setup await cleanup. Backend disconnect failures are logged.
 
+Writes are unacknowledged, like the APK's, when the write characteristic offers
+`write-without-response`; otherwise they are acknowledged. The Airtap T4 offers
+only `write`. Through macOS CoreBluetooth, it never answered unacknowledged
+writes, even well after connecting, and answered acknowledged ones in 40 ms.
+
+Right after connecting, an Airtap T4 may execute commands without replying.
+Commands sent 0.05 and 1.6 seconds after connecting were never answered (a SET
+was still applied); commands sent 3.6 seconds or later always were, and one
+connection answered at 0.6 seconds. Because a timeout reconnects before
+retrying, every retry can land in a new quiet period. Profiles with
+`quiet_after_connect` (type 6) therefore spend up to 3.5 seconds of each new
+connection on a GET of parameter `0x10`; a reply ends the wait early.
+
 ## Compatibility evidence
 
 Controller 69 Pro (type 11, protocol revision 7, software 3.2.56) has hardware
 coverage for discovery, root/port settings, manual fan speed, revision reads,
 telemetry-only refresh, idle disconnect and reconnect using a local adapter.
+
+Airtap T4 (type 6, protocol revision 3, advertised as `BLE_FAN`) has hardware
+coverage for this library's `update()`, `set_speed()` and `turn_off()` with
+legacy telemetry, through a macOS CoreBluetooth adapter. A separate client
+using the same frames also confirmed the eight-parameter GET (`0x10`–`0x17`),
+ON/OFF/Auto mode writes, manual speed and ACKs through a macOS adapter and an
+ESPHome Bluetooth proxy. Its telemetry frames are 18 bytes with no port records;
+byte 17 is root level `<< 4` plus work mode. Parameter `0x11` reads `5` while
+OFF mode reports level 0 in telemetry. Replies use `a5 13`.
+
 Other families are implemented from the APK's dispatch paths and wire layouts;
 that evidence does not establish compatibility with every firmware or physical
 load combination. Physical proxy and multi-load validation is separate from

@@ -1,4 +1,4 @@
-"""Controller 69 Pro captures: software 3.2.56, protocol revision 7."""
+"""Controller 69 Pro (software 3.2.56, revision 7) and Airtap T4 captures."""
 
 import asyncio
 from binascii import crc_hqx
@@ -6,8 +6,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from ac_infinity_ble.models import DeviceInfo
-from ac_infinity_ble.protocol import Protocol
+from ac_infinity_ble.commands import ParameterCodec
+from ac_infinity_ble.models import DeviceInfo, PortState
+from ac_infinity_ble.modes import ControllerMode
+from ac_infinity_ble.protocol import Protocol, parse_manufacturer_data
+from ac_infinity_ble.telemetry import parse_telemetry
 
 from .frames import response_frame
 from .test_device import make_controller
@@ -90,3 +93,51 @@ def test_captured_v7_reply_fragments_interleaved_with_live_telemetry(split):
         assert controller._notify_future.result() == MODEL_V7
 
     asyncio.run(exercise())
+
+
+# Airtap T4 captures: device type 6, protocol revision 3. The advertisement's
+# identity bytes are replaced with a placeholder address.
+ADVERTISEMENT_T4 = bytes.fromhex(
+    "a4c138000001343533534303060007360000010000000000000000"
+)
+MODEL_T4 = bytes.fromhex(
+    "a513002a000337d5000110010211010512010113070c401242130000140400000000"
+    "1504000000001608000000000000000017008439"
+)
+SET_T4 = bytes.fromhex("a51300040004daf50003100012009e74")
+
+
+def test_captured_t4_advertisement():
+    info = parse_manufacturer_data(ADVERTISEMENT_T4)
+    assert (info.type, info.version, info.name) == (6, 3, "D-453SC")
+    assert info.tmp == 18.46 and info.fan == 1
+
+
+def test_captured_t4_model_and_ack():
+    protocol = Protocol()
+    state = DeviceInfo(6, "Test", 3)
+    values = protocol.parse_parameters(MODEL_T4, state, 0)
+    assert values[16] == b"\x02" and values[17] == b"\x05" and values[18] == b"\x01"
+    output = ParameterCodec(state.profile).decode_output(values, PortState(0))
+    assert (output.mode, output.level_on, output.level_off) == (2, 1, 5)
+    protocol.validate_ack(SET_T4, state, 0, {16, 18})
+
+
+@pytest.mark.parametrize(
+    "frame,mode,level",
+    [
+        ("1eff0209030c000007460000000027100012", ControllerMode.ON, 1),
+        ("1eff0209030c0000075b0000000027100022", ControllerMode.ON, 2),
+        ("1eff0209030c000007670000000027100001", ControllerMode.OFF, 0),
+    ],
+)
+def test_captured_t4_telemetry_reports_root_level(frame, mode, level):
+    updated = parse_telemetry(bytes.fromhex(frame), DeviceInfo(6, "Test", 3, fan=9))
+    assert (updated.work_type, updated.fan) == (mode, level)
+    assert updated.ports == {}
+    assert updated.tmp is not None and 18 < updated.tmp < 19
+
+
+def test_unverified_legacy_models_keep_advertised_root_level():
+    frame = bytes.fromhex("1eff0209030c000007460000000027100012")
+    assert parse_telemetry(frame, DeviceInfo(1, "Test", 3, fan=9)).fan == 9

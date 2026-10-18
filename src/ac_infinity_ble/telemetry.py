@@ -86,7 +86,11 @@ def _parse_controller(data: bytes | bytearray, state: DeviceInfo) -> DeviceInfo:
         fan_type=int.from_bytes(data[14:16], "big"),
         fan_state=data[16] >> 6,
         work_type=data[17] & 15,
-        fan=(data[16] >> 2) & 15 if modern else state.fan,
+        fan=(data[16] >> 2) & 15
+        if modern
+        else data[17] >> 4
+        if state.profile.root_level_in_mode_byte
+        else state.fan,
         ports=ports,
     )
 

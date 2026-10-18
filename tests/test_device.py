@@ -26,7 +26,7 @@ def make_controller():
     )
     controller._client = Mock(write_gatt_char=AsyncMock())
     controller._read_char = Mock()
-    controller._write_char = Mock()
+    controller._write_char = Mock(properties=["write-without-response", "write"])
     return controller
 
 

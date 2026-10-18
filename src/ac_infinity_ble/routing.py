@@ -35,6 +35,11 @@ class ProtocolProfile:
     root_kind: str | None = None
     aggregate_fan: bool = True
     packed_manual_level: bool = False
+    # Hardware-observed on an Airtap T4 (type 6, revision 3): commands sent up
+    # to ~3 s after connecting may be executed without any reply.
+    quiet_after_connect: bool = False
+    # Same device: legacy telemetry byte 17 is root level << 4 | work mode.
+    root_level_in_mode_byte: bool = False
 
     @property
     def read_tags(self) -> tuple[int, ...]:
@@ -81,4 +86,6 @@ def resolve_profile(device_type: int, version: int) -> ProtocolProfile:
         root_kind=root_kind,
         aggregate_fan=not sensor and root_kind is None,
         packed_manual_level=not home and not sensor and (extended or version > 7),
+        quiet_after_connect=device_type == 6,
+        root_level_in_mode_byte=device_type == 6 and layout == TelemetryLayout.LEGACY,
     )
