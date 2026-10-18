@@ -20,6 +20,7 @@ from .test_device import make_controller
     "model,version,layout,width,addressed,root",
     [
         (1, 3, "legacy", 1, False, None),
+        (6, 3, "legacy", 1, False, None),
         (11, 4, "legacy", 1, True, None),
         (11, 5, "v6", 1, True, None),
         (14, 4, "sensor", 1, False, None),
@@ -37,6 +38,21 @@ def test_apk_routing_boundaries(model, version, layout, width, addressed, root):
     assert profile.parameter_length_size == width
     assert profile.addressed == addressed
     assert profile.root_kind == root
+
+
+@pytest.mark.parametrize(
+    "model,version,quiet,level_byte",
+    [
+        (6, 3, True, True),
+        (6, 5, True, False),
+        (1, 3, False, False),
+        (11, 7, False, False),
+    ],
+)
+def test_airtap_hardware_quirks_are_scoped(model, version, quiet, level_byte):
+    profile = resolve_profile(model, version)
+    assert profile.quiet_after_connect is quiet
+    assert profile.root_level_in_mode_byte is level_byte
 
 
 def test_high_command_byte_is_part_of_command_matching():

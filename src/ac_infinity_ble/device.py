@@ -40,8 +40,19 @@ WRITE_CHUNK_SIZE = 20
 DISCONNECT_DELAY = 5
 DEVICE_INFORMATION_TIMEOUT = 5
 DEFAULT_ATTEMPTS = 3
+# Airtap T4 (revision 3) may not reply for up to ~3 s after connecting.
+CONNECT_QUIET_PERIOD = 3.5
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _write_with_response(characteristic: BleakGATTCharacteristic) -> bool:
+    """Acknowledge writes only where unacknowledged ones are not offered.
+
+    The APK writes without response. The Airtap T4's write characteristic only
+    offers acknowledged writes; it ignored unacknowledged ones in testing.
+    """
+    return "write-without-response" not in characteristic.properties
 
 
 class ACInfinityController:
@@ -377,6 +388,8 @@ class ACInfinityController:
                 if self._client is not client or not client.is_connected:
                     raise BleakError("Disconnected while subscribing to notifications")
                 await self._read_device_information(client)
+                if self._state.profile.quiet_after_connect:
+                    await self._wait_out_quiet_period()
                 self._cache_recovery_attempted = False
             except BaseException:
                 read_char = self._read_char
@@ -425,6 +438,20 @@ class ACInfinityController:
         if not client.is_connected or self._client is not client:
             raise BleakError("Disconnected while reading device information")
         self._device_information_read = complete
+
+    async def _wait_out_quiet_period(self) -> None:
+        """Spend the post-connect quiet period on a harmless mode read.
+
+        Without this the first command times out, and the retry reconnects into
+        a new quiet period. A reply ends the wait early.
+        """
+        command = self._protocol.get_parameters(self._state, 0, [16], self.sequence)
+        try:
+            await self._execute_command_locked(command, CONNECT_QUIET_PERIOD)
+        except TimeoutError:
+            _LOGGER.debug(
+                "%s: No reply during the post-connect quiet period", self.name
+            )
 
     def _notification_handler(
         self, _sender: BleakGATTCharacteristic | int, data: bytearray
@@ -643,7 +670,9 @@ class ACInfinityController:
 
         raise RuntimeError("Unreachable")
 
-    async def _execute_command_locked(self, command: bytes) -> bytes:
+    async def _execute_command_locked(
+        self, command: bytes, response_timeout: float | None = None
+    ) -> bytes:
         """Execute command and read response."""
         assert self._client is not None  # nosec
         if not self._read_char:
@@ -658,6 +687,7 @@ class ACInfinityController:
         self._notify_future = self.loop.create_future()
         client = self._client
         write_char = self._write_char
+        response = _write_with_response(write_char)
         try:
             # The APK splits packets for the negotiated MTU. Twenty-byte chunks
             # also work on the minimum BLE MTU, without backend-specific setup.
@@ -666,9 +696,9 @@ class ACInfinityController:
                     await client.write_gatt_char(
                         write_char,
                         command[offset : offset + WRITE_CHUNK_SIZE],
-                        False,
+                        response,
                     )
-            async with asyncio.timeout(RESPONSE_TIMEOUT):
+            async with asyncio.timeout(response_timeout or RESPONSE_TIMEOUT):
                 return bytes(await self._notify_future)
         finally:
             if not self._notify_future.done():

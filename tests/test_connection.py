@@ -10,13 +10,14 @@ from ac_infinity_ble.const import (
     POSSIBLE_WRITE_CHARACTERISTIC_UUIDS,
 )
 from ac_infinity_ble.exceptions import CharacteristicMissingError
+from ac_infinity_ble.models import DeviceInfo
 
-from .frames import SET_RESPONSE
+from .frames import SET_RESPONSE, response_frame
 from .test_device import assert_request_cleared, make_controller
 
 
-def make_client():
-    read_char, write_char = Mock(), Mock()
+def make_client(write_properties=("write-without-response", "write")):
+    read_char, write_char = Mock(), Mock(properties=list(write_properties))
     characteristics = {
         POSSIBLE_READ_CHARACTERISTIC_UUIDS[0]: read_char,
         POSSIBLE_WRITE_CHARACTERISTIC_UUIDS[0]: write_char,
@@ -368,5 +369,59 @@ def test_cache_recovery_does_not_repeat_for_a_persistently_wrong_service(monkeyp
         first.clear_cache.assert_awaited_once()
         second.clear_cache.assert_not_awaited()
         second.disconnect.assert_awaited_once()
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize(
+    "properties,response",
+    [
+        (("write-without-response", "write"), False),
+        (("write",), True),
+    ],
+)
+def test_write_acknowledged_only_when_required(monkeypatch, properties, response):
+    async def exercise():
+        client = make_client(properties)
+        controller, _ = prepare_connection(monkeypatch, client)
+        reply_on_write(controller, client)
+        command = controller._protocol.set_level(7, 2, 5, 0, 0x7695)
+        assert await controller._send_command(command) == SET_RESPONSE
+        assert client.write_gatt_char.await_args.args[2] is response
+        await controller.stop()
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("device_type,writes", [(6, 2), (7, 1)])
+def test_quiet_period_after_connect(monkeypatch, device_type, writes):
+    """Airtap T4: commands just after connecting are executed but not answered."""
+
+    async def exercise():
+        client = make_client(("write",))
+        controller, establish = prepare_connection(monkeypatch, client)
+        controller._state = DeviceInfo(device_type, "Test", 3)
+        monkeypatch.setattr(device, "CONNECT_QUIET_PERIOD", 0.01)
+        sent = []
+
+        async def write(_char, data, _response):
+            sent.append(bytes(data))
+            if device_type == 6 and len(sent) == 1:
+                return  # still within the quiet period
+            reply = response_frame(
+                b"\x10\x00\x12\x00", int.from_bytes(data[4:6], "big"), data[9]
+            )
+            controller._notification_handler(0, bytearray(reply))
+
+        client.write_gatt_char.side_effect = write
+        command = controller._protocol.set_parameters(
+            controller.state, 0, {16: b"\x02", 18: b"\x01"}, controller.sequence
+        )
+        await controller._send_command(command)
+        assert establish.await_count == 1
+        assert len(sent) == writes and sent[-1] == command
+        if device_type == 6:
+            assert sent[0][8:11] == b"\x00\x01\x10"  # GET mode
+        await controller.stop()
 
     asyncio.run(exercise())
