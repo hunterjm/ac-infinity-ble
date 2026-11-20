@@ -179,6 +179,28 @@ def test_connect_timeout_is_bounded(monkeypatch):
     asyncio.run(exercise())
 
 
+def test_connect_guard_outlasts_the_retry_budget():
+    # The guard must never cancel an attempt that bleak-retry-connector would
+    # still time out on its own: a cancelled ESPHome proxy connect can leave the
+    # device connected at the radio level after Home Assistant has given up.
+    import bleak_retry_connector as brc
+
+    per_attempt = brc.BLEAK_TIMEOUT + brc.BLEAK_OUT_OF_SLOTS_BACKOFF_TIME
+    assert device.CONNECT_ATTEMPT_BUDGET >= per_attempt
+    assert device.CONNECT_TIMEOUT > device.CONNECT_ATTEMPTS * per_attempt
+
+
+def test_connect_passes_its_attempt_budget(monkeypatch):
+    async def exercise():
+        client = make_client()
+        controller, establish = prepare_connection(monkeypatch, client)
+        await controller._ensure_connected()
+        assert establish.await_args.kwargs["max_attempts"] == device.CONNECT_ATTEMPTS
+        await controller.stop()
+
+    asyncio.run(exercise())
+
+
 @pytest.mark.parametrize("failure", ["raise", "hang"])
 def test_unsubscribe_failure_still_disconnects_and_cancels_timer(monkeypatch, failure):
     async def exercise():

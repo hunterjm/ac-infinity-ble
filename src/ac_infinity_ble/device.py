@@ -32,7 +32,16 @@ from .protocol import Protocol, is_command_header, parse_manufacturer_data
 from .telemetry import frame_length as telemetry_frame_length
 from .telemetry import parse_telemetry
 
-CONNECT_TIMEOUT = 30
+# establish_connection retries internally, giving each attempt its own transport
+# timeout (bleak-retry-connector's BLEAK_TIMEOUT, 20 s) plus a short backoff (up to
+# 4 s when a proxy is out of connection slots). CONNECT_TIMEOUT is only a last-resort
+# guard against a hung backend and must outlast that whole budget. If it fires while
+# an attempt is in flight, the attempt is cancelled rather than timed out; an
+# ESPHome Bluetooth proxy can then complete a link Home Assistant has already
+# abandoned, leaving the device connected (and silent) until the proxy restarts.
+CONNECT_ATTEMPTS = 3
+CONNECT_ATTEMPT_BUDGET = 25
+CONNECT_TIMEOUT = CONNECT_ATTEMPTS * CONNECT_ATTEMPT_BUDGET + 15
 GATT_TIMEOUT = 10
 RESPONSE_TIMEOUT = 5
 DISCONNECT_TIMEOUT = 5
@@ -340,6 +349,7 @@ class ACInfinityController:
                     self.name,
                     self._disconnected,
                     use_services_cache=True,
+                    max_attempts=CONNECT_ATTEMPTS,
                 )
             _LOGGER.debug("%s: Connected; RSSI: %s", self.name, self.rssi)
             self._client = client
