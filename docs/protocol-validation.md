@@ -113,7 +113,9 @@ climate values begin at 15; other C v4 devices begin at 14. The library accepts
 short advertisements for identity only, because extended readings cannot be
 decoded safely from that length. Cloudcom 6 advertisements are 27 bytes but hold
 zeros where the readings would be, so they are also identity-only and its
-climate comes from telemetry.
+climate comes from telemetry. Through an ESPHome Bluetooth proxy the same payload
+arrives in Home Assistant as 24 bytes, without the three trailing zero bytes a
+macOS adapter reports; that length is accepted only for identity-only models.
 
 ## Device Information revisions
 

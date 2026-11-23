@@ -22,6 +22,8 @@ from .test_device import make_controller
 
 # Bytes 0-5 (address) and 6-10 (name) replaced; 11 = revision 20, 12 = type 64.
 ADVERTISEMENT = bytes(6) + b"ABCDE" + bytes.fromhex("14408000000000000000000006000000")
+# The same payload through an ESPHome Bluetooth proxy (Home Assistant): 24 bytes.
+ADVERTISEMENT_PROXY = ADVERTISEMENT[:24]
 # Port 1 ON at speed 2: built-in sensor 71.30 °F, 67.00 %, 0.86 kPa.
 TELEMETRY_SPEED_2 = bytes.fromhex(
     "1eff020914002f1080010002010100000000ffff00000001f000000113d9ffff000a0002f0"
@@ -75,6 +77,14 @@ def test_profile_and_identity_only_advertisement():
     assert state.name == "K-ABCDE"
     # The captured payload has zeros where other models put climate readings.
     assert state.tmp is None and state.hum is None and state.fan is None
+    assert parse_manufacturer_data(ADVERTISEMENT_PROXY) == state
+
+
+def test_24_byte_advertisements_are_only_for_identity_only_models():
+    other = bytearray(ADVERTISEMENT_PROXY)
+    other[11:13] = bytes((7, 11))  # Controller 69 Pro identity, proxy length
+    with pytest.raises(ValueError):
+        parse_manufacturer_data(bytes(other))
 
 
 @pytest.mark.parametrize(

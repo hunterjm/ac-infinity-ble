@@ -30,7 +30,13 @@ def get_mode(mode: int) -> str:
 
 
 def parse_manufacturer_data(data: bytes) -> DeviceInfo:
-    if len(data) not in (17, 27) or data[12] not in MODEL_NAMES:
+    if len(data) not in (17, 24, 27) or data[12] not in MODEL_NAMES:
+        raise ValueError("Unsupported AC Infinity advertisement")
+    identity_only = not resolve_profile(data[12], data[11]).advertised_climate
+    # ESPHome Bluetooth proxies deliver the Cloudcom 6 payload as 24 bytes, without
+    # the three trailing zero bytes a macOS adapter reports; only identity-only
+    # models accept that length, since bytes 13 onward are not decoded for them.
+    if len(data) == 24 and not identity_only:
         raise ValueError("Unsupported AC Infinity advertisement")
     sensor = data[12] in SENSOR_TYPES
     vpd_sensor = data[12] in (24, 25)
@@ -38,7 +44,7 @@ def parse_manufacturer_data(data: bytes) -> DeviceInfo:
         name = data[:6].hex().upper() if vpd_sensor else data[6:11].decode("ascii")
     except UnicodeDecodeError as ex:
         raise ValueError("Invalid AC Infinity device name") from ex
-    if not resolve_profile(data[12], data[11]).advertised_climate:
+    if identity_only:
         # Byte 13 and the readings are not decoded for these models; captured
         # payloads hold zeros there while telemetry reports live values.
         return DeviceInfo(
