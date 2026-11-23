@@ -7,7 +7,12 @@ wire format from a marketing name or from the connected load's type.
 SENSOR_TYPES = frozenset({3, 4, 5, 14, 15, 24, 25, 34, 35})
 H_TYPES = frozenset({19, 20, 21, 22, 26, 27, 51})
 HOME_TYPES = frozenset({33, 39, 40, 48, 49, 50})
-MULTIPORT_TYPES = frozenset({7, 8, 9, 11, 12, 16, 17, 18, 23} | H_TYPES | HOME_TYPES)
+# Hardware-captured, not in the 2.0.8 APK: H4-style TLVs and packed levels, but its
+# own telemetry layout (see protocol-validation.md, "Compatibility evidence").
+CLOUDCOM6_TYPES = frozenset({64})
+MULTIPORT_TYPES = frozenset(
+    {7, 8, 9, 11, 12, 16, 17, 18, 23} | H_TYPES | HOME_TYPES | CLOUDCOM6_TYPES
+)
 MODEL_NAMES = {
     1: "Controller 67",
     2: "Controller 76",
@@ -43,6 +48,7 @@ MODEL_NAMES = {
     49: "Desktop Fan",
     50: "Pedestal Fan",
     51: "Controller AI 2",
+    64: "Cloudcom 6",
 }
 
 # Concrete retail model numbers in APK DeviceConfig.json. Category labels and
@@ -69,6 +75,7 @@ MODEL_NUMBERS = {
     25: "AC-CCB1",
     39: "AC-TFH8",
     40: "AC-12K",
+    64: "CTR92Q",
 }
 
 
@@ -81,6 +88,9 @@ def family(device_type: int) -> str:
         return "C"
     if device_type in H_TYPES:
         return "K" if device_type == 51 else "H"
+    if device_type in CLOUDCOM6_TYPES:
+        # The controller's own info screen lists its model code as "K-<name>".
+        return "K"
     if device_type in HOME_TYPES:
         return "I"
     return {

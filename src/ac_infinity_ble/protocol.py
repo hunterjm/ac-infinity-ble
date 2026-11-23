@@ -1,6 +1,7 @@
 from dataclasses import replace
 
 from .capabilities import (
+    CLOUDCOM6_TYPES,
     H_TYPES,
     HOME_TYPES,
     MODEL_NAMES,
@@ -13,6 +14,7 @@ from .exceptions import FrameValidationError
 from .measurements import packed_sensor_values, reading
 from .models import DeviceInfo
 from .modes import ControllerMode
+from .routing import resolve_profile
 from .util import crc16, get_bit, get_bits
 
 
@@ -36,6 +38,12 @@ def parse_manufacturer_data(data: bytes) -> DeviceInfo:
         name = data[:6].hex().upper() if vpd_sensor else data[6:11].decode("ascii")
     except UnicodeDecodeError as ex:
         raise ValueError("Invalid AC Infinity device name") from ex
+    if not resolve_profile(data[12], data[11]).advertised_climate:
+        # Byte 13 and the readings are not decoded for these models; captured
+        # payloads hold zeros there while telemetry reports live values.
+        return DeviceInfo(
+            type=data[12], version=data[11], name=f"{get_type(data[12])}-{name}"
+        )
     device = DeviceInfo(
         type=data[12],
         version=data[11],
@@ -107,12 +115,15 @@ class Protocol:
         data: bytes | bytearray,
         expected_sequence: int | None = None,
         expected_command: int | None = None,
+        command_prefix: int = 0,
     ) -> bytes:
         """Return the payload of a valid, optionally request-matched response.
 
         Responses use the APK A5 00-A5 1F family and declare payload length in bytes
         2-3. The header and command/payload each have a separate CRC16.
         Telemetry (1E FF) uses a different format and is not a response.
+        Byte 8 must equal ``command_prefix`` (the profile's ``reply_command_prefix``)
+        and byte 9 the expected command.
         """
         if len(data) < 12 or not is_command_header(data):
             raise FrameValidationError("Invalid response header")
@@ -128,9 +139,8 @@ class Protocol:
             and int.from_bytes(data[4:6], "big") != expected_sequence
         ):
             raise FrameValidationError("Unexpected response sequence")
-        if (
-            expected_command is not None
-            and int.from_bytes(data[8:10], "big") != expected_command
+        if expected_command is not None and (
+            data[8] != command_prefix or data[9] != expected_command
         ):
             raise FrameValidationError("Unexpected response command")
         return bytes(data[10:-2])
@@ -152,7 +162,10 @@ class Protocol:
         self, type: int, work_type: int, level: int, b: int, sequence: int
     ) -> bytes:
         """Legacy packet API; newer families require version-aware parameters."""
-        if type not in MODEL_NAMES or type in H_TYPES | HOME_TYPES | SENSOR_TYPES:
+        if (
+            type not in MODEL_NAMES
+            or type in H_TYPES | HOME_TYPES | SENSOR_TYPES | CLOUDCOM6_TYPES
+        ):
             raise ValueError("Use version-aware set_parameters for this device")
         if work_type not in [1, 2]:
             raise ValueError("Work type must be 1 (off) or 2 (on)")
@@ -179,11 +192,15 @@ class Protocol:
     def parse_parameters(
         self, data: bytes, device: DeviceInfo, port: int
     ) -> dict[int, bytes]:
-        payload = self.parse_response(data, expected_command=1)
+        payload = self.parse_response(
+            data, expected_command=1, command_prefix=device.profile.reply_command_prefix
+        )
         return ParameterCodec(device.profile).decode_get(payload, port)
 
     def validate_ack(
         self, data: bytes, device: DeviceInfo, port: int, tags: set[int]
     ) -> None:
-        payload = self.parse_response(data, expected_command=3)
+        payload = self.parse_response(
+            data, expected_command=3, command_prefix=device.profile.reply_command_prefix
+        )
         ParameterCodec(device.profile).validate_ack(payload, port, tags)

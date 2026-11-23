@@ -136,20 +136,82 @@ def _parse_h(data: bytes | bytearray, state: DeviceInfo) -> DeviceInfo:
         )
         offset += stride
     offset += sort_length
-    readings = {}
+    readings: dict[str, float | None] = {}
     for _ in range(sensor_count):
-        start = offset + int(extended)
-        sensor_id, flags = data[start], data[start + 1]
-        raw = int.from_bytes(data[start + 2 : start + 4], "big", signed=True)
-        accuracy = (flags >> 5) & 3
-        value = None if raw == -32768 else raw * (10, 1, 0.1, 0.01)[accuracy]
-        # The primary climate probe uses IDs 0/1 (F/C), 2 (RH), 3 (VPD).
-        if sensor_id == 0 and value is not None:
-            value = (value - 32) / 1.8
-        key = {0: "tmp", 1: "tmp", 2: "hum", 3: "vpd"}.get(sensor_id)
-        if key is not None:
-            readings[key] = value
+        _read_climate(data, offset + int(extended), readings)
         offset += sensor_stride
+    return _with_ai_ports(state, selected, ports, readings)
+
+
+def _parse_cloudcom6(data: bytes | bytearray, state: DeviceInfo) -> DeviceInfo:
+    """Type 64: twelve-byte port records, then counted sensor groups.
+
+    The header has the port count at 11, the sensor-group count at 12, the selected
+    port at 13 and, as in H4, three-byte records counted by the low nibble of 14.
+    A port record is H4's with a flags byte before the mode byte. A sensor group is
+    ``source, index, count`` followed by ``count`` four-byte AI sensor records. The
+    first group is the controller's own sensor; later groups (an external probe)
+    are validated but not exposed.
+    """
+    port_count, group_count, selected = data[11], data[12], data[13]
+    offset = 15 + (data[14] & 15) * 3
+    ports = {}
+    for _ in range(port_count):
+        if offset + 12 > len(data):
+            raise ValueError("Truncated Cloudcom 6 port record")
+        port_id, start = data[offset], offset + 1
+        if port_id in ports:
+            raise ValueError("Duplicate Cloudcom 6 port")
+        raw_type = int.from_bytes(data[start : start + 2], "big")
+        load_id = int.from_bytes(data[start + 2 : start + 4], "big")
+        ports[port_id] = PortState(
+            port_id,
+            connected=data[start] != 255,
+            raw_type=raw_type,
+            kind=load_kind(data[start + 4]) or recognized_kind(raw_type, load_id),
+            level=(data[start + 5] >> 2) & 15,
+            mode=data[start + 7] & 31,
+        )
+        offset += 12
+    readings: dict[str, float | None] = {}
+    for group in range(group_count):
+        if offset + 3 > len(data):
+            raise ValueError("Truncated Cloudcom 6 sensor group")
+        end = offset + 3 + data[offset + 2] * 4
+        if end > len(data):
+            raise ValueError("Truncated Cloudcom 6 sensor group")
+        if group == 0:
+            for start in range(offset + 3, end, 4):
+                _read_climate(data, start, readings)
+        offset = end
+    if offset != len(data):
+        raise ValueError("Invalid Cloudcom 6 port/sensor counts")
+    return _with_ai_ports(state, selected, ports, readings)
+
+
+def _read_climate(
+    data: bytes | bytearray, start: int, readings: dict[str, float | None]
+) -> None:
+    """Store one AI sensor record (ID, accuracy flags, signed value) by key."""
+    sensor_id, flags = data[start], data[start + 1]
+    raw = int.from_bytes(data[start + 2 : start + 4], "big", signed=True)
+    accuracy = (flags >> 5) & 3
+    value = None if raw == -32768 else raw * (10, 1, 0.1, 0.01)[accuracy]
+    # The primary climate probe uses IDs 0/1 (F/C), 2 (RH), 3 (VPD).
+    if sensor_id == 0 and value is not None:
+        value = (value - 32) / 1.8
+    key = {0: "tmp", 1: "tmp", 2: "hum", 3: "vpd"}.get(sensor_id)
+    if key is not None:
+        readings[key] = value
+
+
+def _with_ai_ports(
+    state: DeviceInfo,
+    selected: int,
+    ports: dict[int, PortState],
+    readings: dict[str, float | None],
+) -> DeviceInfo:
+    """Port 0 is the controller-wide channel; climate keeps old values if absent."""
     main = ports.get(0)
     return replace(
         state,
@@ -170,4 +232,5 @@ _DECODERS = {
     TelemetryLayout.H: _parse_h,
     TelemetryLayout.H4: _parse_h,
     TelemetryLayout.HOME: _parse_home,
+    TelemetryLayout.CLOUDCOM6: _parse_cloudcom6,
 }
