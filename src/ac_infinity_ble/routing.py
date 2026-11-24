@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from .capabilities import (
+    CLOUDCOM6_TYPES,
     H_TYPES,
     HOME_TYPES,
     MODEL_NAMES,
@@ -21,6 +22,7 @@ class TelemetryLayout(Enum):
     H = "h"
     H4 = "h4"
     HOME = "home"
+    CLOUDCOM6 = "cloudcom6"
 
 
 @dataclass(frozen=True)
@@ -35,6 +37,11 @@ class ProtocolProfile:
     root_kind: str | None = None
     aggregate_fan: bool = True
     packed_manual_level: bool = False
+    # Byte 8 of command replies; 0 except where hardware echoes its revision there.
+    reply_command_prefix: int = 0
+    # Extended advertisements carry climate readings, except where captures show
+    # zeros and the readings arrive only in telemetry.
+    advertised_climate: bool = True
 
     @property
     def read_tags(self) -> tuple[int, ...]:
@@ -54,11 +61,14 @@ def resolve_profile(device_type: int, version: int) -> ProtocolProfile:
         raise ValueError("Unsupported device")
     sensor = device_type in SENSOR_TYPES
     home = device_type in HOME_TYPES
+    cloudcom6 = device_type in CLOUDCOM6_TYPES
     extended = is_h4(device_type, version)
     if sensor:
         layout = TelemetryLayout.SENSOR
     elif home:
         layout = TelemetryLayout.HOME
+    elif cloudcom6:
+        layout = TelemetryLayout.CLOUDCOM6
     elif extended:
         layout = TelemetryLayout.H4
     elif device_type in H_TYPES:
@@ -75,10 +85,14 @@ def resolve_profile(device_type: int, version: int) -> ProtocolProfile:
         model_number=MODEL_NUMBERS.get(device_type),
         telemetry=layout,
         addressed=device_type in MULTIPORT_TYPES,
-        parameter_length_size=2 if extended else 1,
+        parameter_length_size=2 if extended or cloudcom6 else 1,
         writable=not sensor,
         separate_power=home,
         root_kind=root_kind,
         aggregate_fan=not sensor and root_kind is None,
-        packed_manual_level=not home and not sensor and (extended or version > 7),
+        packed_manual_level=not home
+        and not sensor
+        and (extended or cloudcom6 or version > 7),
+        reply_command_prefix=version if cloudcom6 else 0,
+        advertised_climate=not cloudcom6,
     )

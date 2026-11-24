@@ -52,7 +52,7 @@ def test_short_advertisement_does_not_invent_measurements():
     assert state.tmp is None and state.hum is None and state.fan is None
 
 
-@pytest.mark.parametrize("model", [64, 99])
+@pytest.mark.parametrize("model", [65, 99])
 def test_unverified_models_reject_discovery_and_commands(model):
     with pytest.raises(ValueError):
         parse_manufacturer_data(advertisement(model, 6))

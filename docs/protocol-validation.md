@@ -18,7 +18,7 @@ APK `BaseProtocol` (`zt`) builds the following layout, which the APK's
 | 2–3      | Big-endian payload length; complete packet is this length + 12   |
 | 4–5      | Unsigned big-endian sequence                                     |
 | 6–7      | Header CRC over bytes 0–5                                        |
-| 8–9      | Command; the commands used here have byte 8 = 0                  |
+| 8–9      | Command; byte 8 = 0, except in Cloudcom 6 replies (see below)    |
 | 10…      | Payload                                                          |
 | Last two | Body CRC over bytes 8 through the end of the payload             |
 
@@ -28,7 +28,10 @@ independent `binascii.crc_hqx` checksums and captured response bytes.
 
 The library follows the APK packet assembler's `a5 00`–`a5 1f` header family.
 Captured protocol-3 replies use `a5 13`; a hardware-tested Controller 69 Pro with
-protocol revision 7 and software 3.2.56 uses `a5 17`. Header recognition still requires
+protocol revision 7 and software 3.2.56 uses `a5 17`. A Cloudcom 6 with revision 20
+and software 1.0.49 replies with `a5 1f` and puts `14` (its revision) in byte 8
+ahead of the command; its profile's `reply_command_prefix` makes that byte part
+of the command match. Requests keep byte 8 = 0. Header recognition still requires
 exact length, both CRCs, command, sequence, or command-payload validation.
 
 The APK assembler (`u47`) checks the header family and declared length;
@@ -93,6 +96,7 @@ publishing local success.
 | H                                                     | `6 + byte[5]`              | Counted calibration records, ten-byte port records, then four-byte sensor records                                            |
 | H4                                                    | `7 + uint16_be[5:7]`       | Explicit port IDs in eleven-byte records; sensor ordering block; five-byte sensor records                                    |
 | Home appliances                                       | `6 + byte[5]`, at least 28 | Level in high nibble of 7; inside/outside temperature at 12/14; power measurement at 16; work mode at 23                     |
+| Cloudcom 6 (type 64; hardware captures)               | `7 + uint16_be[5:7]`       | Port count at 11, sensor-group count at 12; twelve-byte port records with a flags byte before mode; counted sensor groups    |
 
 Legacy/v6 climate measurements are signed 16-bit values in hundredths; `8000`
 means missing. The home appliance's power _measurement_ is not its power-switch
@@ -107,7 +111,11 @@ has climate flags at 13 and readings from 14. VPD Cloudcom sensors use bytes
 6–10 for VPD data and derive the name from identity instead. Their packed
 climate values begin at 15; other C v4 devices begin at 14. The library accepts
 short advertisements for identity only, because extended readings cannot be
-decoded safely from that length.
+decoded safely from that length. Cloudcom 6 advertisements are 27 bytes but hold
+zeros where the readings would be, so they are also identity-only and its
+climate comes from telemetry. Through an ESPHome Bluetooth proxy the same payload
+arrives in Home Assistant as 24 bytes, without the three trailing zero bytes a
+macOS adapter reports; that length is accepted only for identity-only models.
 
 ## Device Information revisions
 
@@ -148,6 +156,7 @@ controllers and IDs describing connected loads are different namespaces.
 | 19, 20, 21, 22, 26, 27                  | H family                                 | Counted port/sensor records; version-aware TLVs                                       |
 | H family version ≥20; 51 at any version | `H4FamilialResolution` (`ml2`)           | Two-byte TLV lengths; extended telemetry length and explicit port IDs                 |
 | 33, 39, 40, 48, 49, 50                  | `RoomToRoomFanResolution` (`jw5`)        | Dedicated power parameter `0x16`, level `0x12`, home telemetry                        |
+| 64                                      | Not in APK 2.0.8; hardware captures      | H4-style two-byte TLVs, packed levels and port trailer; own telemetry layout          |
 
 Type 11 is Controller 69 Pro; type 18 is Controller 69 Pro+. Type 7 is the
 Bluetooth Controller 69. The outlet variants include Controller 76, desktop and
@@ -202,6 +211,25 @@ unload, and failed setup await cleanup. Backend disconnect failures are logged.
 Controller 69 Pro (type 11, protocol revision 7, software 3.2.56) has hardware
 coverage for discovery, root/port settings, manual fan speed, revision reads,
 telemetry-only refresh, idle disconnect and reconnect using a local adapter.
+Cloudcom 6 (type 64, protocol revision 20, software 1.0.49, firmware 1.0), as
+supplied with a CLOUDLINE T8 fan, has hardware coverage from captures over a macOS
+adapter: identity-only advertisements; root and port 1 GET; manual speed SETs
+(3→2, then 1, 5 and 10) with ACK, GET readback and telemetry; OFF from the
+controller's own screen; built-in climate and an external probe checked against
+the screen; and the fan cable unplugged and replugged. The controller's info
+screen lists model Cloudcom 6, model number CTR92Q, model code `K-<name>` and
+firmware 1.0.49, so type 64 uses the K family prefix. Fixtures are in
+`tests/test_cloudcom6_frames.py`. Telemetry follows the selected level within
+about a second per step as the fan ramps. Observed but not decoded: bit 7 of the
+port flags byte set when the fan cable was unplugged and stayed set after it was
+replugged, while the port kept reporting level 3 as the fan ran at full speed;
+and the packed maximum (low nibble of `0x12`) changed without a SET (3→0 after
+OFF from the screen, 0→10 while unplugged). In Home Assistant 2026.11.1 through
+an ESPHome 2026.9.1 Bluetooth proxy, with the integration rechecking polls every
+ten seconds (its advertisement never changes), it passed notification-only
+refresh, idle disconnect and reconnect, entry reload, a proxy reload part-way
+through a speed SET (reconnected and completed) and a Home Assistant restart.
+App coexistence is not yet validated.
 Other families are implemented from the APK's dispatch paths and wire layouts;
 that evidence does not establish compatibility with every firmware or physical
 load combination. Physical proxy and multi-load validation is separate from

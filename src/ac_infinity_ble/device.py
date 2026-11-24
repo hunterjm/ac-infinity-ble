@@ -104,7 +104,10 @@ class ACInfinityController:
             not in {"ports", "level_on", "level_off", "device_information"}
             and getattr(info, field.name) is not None
         }
-        if len(advertisement_data.manufacturer_data[MANUFACTURER_ID]) == 27:
+        if (
+            len(advertisement_data.manufacturer_data[MANUFACTURER_ID]) == 27
+            and info.profile.advertised_climate
+        ):
             updates.update(tmp=info.tmp, hum=info.hum, vpd=info.vpd)
         self._state = replace(self._state, **updates)
         self._fire_callbacks(CallbackType.ADVERTISEMENT)
@@ -168,7 +171,7 @@ class ACInfinityController:
         return self._sequence
 
     async def update(self, port: int = 0) -> None:
-        """Read named mode parameters; sensors are updated from advertisements."""
+        """Read named mode parameters; climate comes from advertisements/telemetry."""
         codec = ParameterCodec(self._state.profile)
         if not codec.profile.writable:
             return
@@ -483,7 +486,10 @@ class ACInfinityController:
                 if len(packet) < frame_length:
                     return
                 self._protocol.parse_response(
-                    packet, self._pending_sequence, self._pending_command
+                    packet,
+                    self._pending_sequence,
+                    self._pending_command,
+                    self._state.profile.reply_command_prefix,
                 )
             except ValueError as ex:
                 self._response_buffer.clear()
