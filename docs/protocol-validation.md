@@ -224,8 +224,12 @@ about a second per step as the fan ramps. Observed but not decoded: bit 7 of the
 port flags byte set when the fan cable was unplugged and stayed set after it was
 replugged, while the port kept reporting level 3 as the fan ran at full speed;
 and the packed maximum (low nibble of `0x12`) changed without a SET (3→0 after
-OFF from the screen, 0→10 while unplugged). Proxy routing, idle disconnect and
-app coexistence for this model are not yet validated.
+OFF from the screen, 0→10 while unplugged). In Home Assistant 2026.11.1 through
+an ESPHome 2026.9.1 Bluetooth proxy, with the integration rechecking polls every
+ten seconds (its advertisement never changes), it passed notification-only
+refresh, idle disconnect and reconnect, entry reload, a proxy reload part-way
+through a speed SET (reconnected and completed) and a Home Assistant restart.
+App coexistence is not yet validated.
 Other families are implemented from the APK's dispatch paths and wire layouts;
 that evidence does not establish compatibility with every firmware or physical
 load combination. Physical proxy and multi-load validation is separate from
